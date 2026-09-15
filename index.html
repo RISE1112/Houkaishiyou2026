@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>リアル恋愛会話シミュレーター</title>
+<title>リアルAI 恋愛会話シミュレーター</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f2f2f7; margin: 0; padding: 15px; color: #333; }
   .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
@@ -23,10 +23,13 @@
 <body>
 
 <div class="card" id="setup-card">
-  <h2>ターゲット設定</h2>
+  <h2>ターゲット＆システム設定</h2>
   
+  <label>API Key（Google AI Studioで無料発行）</label>
+  <input type="password" id="api-key" placeholder="AIStudioのAPIキーを入力">
+
   <label>相手の名前</label>
-  <input type="text" id="target-name" placeholder="例: りょうか（未入力なら『ちゃん』付け）">
+  <input type="text" id="target-name" placeholder="例: りょうか">
 
   <label>ジャンル</label>
   <select id="genre">
@@ -65,67 +68,63 @@
     <option>ENTJ (指揮官)</option>
   </select>
 
-  <label>性格（バリエーション大幅拡張）</label>
+  <label>性格</label>
   <select id="personality">
-    <option>ツンデレ・警戒心高め</option>
-    <option>明るい・フレンドリー</option>
-    <option>おとなしい・控えめ</option>
-    <option>ノリが良い・かまってちゃん</option>
-    <option>サバサバ・姉御肌</option>
-    <option>甘えん坊・ド天然</option>
-    <option>サディスティック・小悪魔</option>
-    <option>クーデレ・クール</option>
+    <option>ノリが良く質問魔・興味津々</option>
+    <option>ツンデレ・実は興味深々</option>
+    <option>明るい・甘えん坊でかまってちゃん</option>
+    <option>サバサバ系だが質問は多め</option>
+    <option>おとなしいが話を聞きたがる</option>
   </select>
 
-  <label>雰囲気（スタイル拡張）</label>
+  <label>雰囲気</label>
   <select id="atmosphere">
-    <option>清楚系</option>
-    <option>地雷系・サブカル</option>
-    <option>ギャル系</option>
-    <option>大人っぽい・お姉さん系</option>
-    <option>量産型・あざと系</option>
-    <option>サブカル病み系</option>
-    <option>ボーイッシュ・スポーティ</option>
+    <option>ギャル系（リアクション大きめ）</option>
+    <option>清楚系（丁寧だが興味津々）</option>
+    <option>地雷系・サブカル（執着心あり）</option>
+    <option>大人っぽい・お姉さん系（上手質問）</option>
+    <option>あざと可愛い・量産型</option>
   </select>
 
-  <label>会った回数・関係性</label>
+  <label>関係性</label>
   <select id="count">
     <option>初対面（1回目）</option>
-    <option>2〜3回目（少し慣れてきた）</option>
-    <option>4〜5回目（そこそこ親しい）</option>
-    <option>常連・タメ口で話せる仲</option>
+    <option>2〜3回目（興味を持ち始めている）</option>
+    <option>常連・仲良し（好意あり）</option>
   </select>
 
-  <label>フィードバックの雰囲気（口調）</label>
+  <label>フィードバックの口調</label>
   <select id="fb-style">
-    <option value="strict">厳しい恋愛コーチ（スパルタアドバイス）</option>
-    <option value="friendly">優しい女友達（共感＆サポート）</option>
-    <option value="logical">論理的なアドバイザー（データ・戦略重視）</option>
+    <option value="strict">厳しいスパルタコーチ</option>
+    <option value="friendly">優しい女子友達</option>
+    <option value="logical">論理的恋愛アドバイザー</option>
   </select>
 
-  <button onclick="startChat()">会話をスタートする</button>
+  <button onclick="startChat()">AIと会話を開始する</button>
 </div>
 
 <div class="card" id="chat-card" style="display:none;">
   <h3 id="chat-title">チャット</h3>
   <div id="chat-box"></div>
-
   <div id="feedback-box" class="feedback" style="display:none;"></div>
 
   <div style="margin-top: 10px;">
     <input type="text" id="user-input" placeholder="メッセージを入力...">
-    <button onclick="sendMessage()">送信する</button>
+    <button onclick="sendMessage()" id="send-btn">送信する</button>
   </div>
 </div>
 
 <script>
 let state = {};
-let lastReply = ""; // 重複防止用
+let history = [];
 
-function startChat() {
-  const nameInput = document.getElementById('target-name').value.trim();
+async function startChat() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  if(!apiKey) { alert('APIキーを入力してください'); return; }
+
   state = {
-    name: nameInput || "女の子",
+    apiKey: apiKey,
+    name: document.getElementById('target-name').value.trim() || "女の子",
     genre: document.getElementById('genre').value,
     age: document.getElementById('age').value,
     mbti: document.getElementById('mbti').value,
@@ -137,27 +136,48 @@ function startChat() {
 
   document.getElementById('setup-card').style.display = 'none';
   document.getElementById('chat-card').style.display = 'block';
-  document.getElementById('chat-title').innerText = `${state.name} との会話`;
+  document.getElementById('chat-title').innerText = `${state.name} とのリアルAIチャット`;
 
-  // 会話スタート時の初期メッセージ生成
-  let initialMsg = "";
-  if (state.genre.includes("コンカフェ")) {
-    initialMsg = state.atmosphere.includes("地雷") ? 
-      `あ、いらっしゃい〜🖤 今日もお給仕がんばってるよ、あいにきてくれてありがと…！` : 
-      `おかえりなさい〜！✨ 今日も話せてめっちゃ嬉しい！何飲む〜？`;
-  } else if (state.genre.includes("地下")) {
-    initialMsg = `今日もお話しにきてくれてありがと〜！！💕 めっちゃ会いたかった！`;
-  } else if (state.personality.includes("ツンデレ")) {
-    initialMsg = `…何？別に待ってたわけじゃないけど笑`;
-  } else if (state.atmosphere.includes("ギャル")) {
-    initialMsg = `やっほ〜！今日マジで暑くない？笑 何してたんー？`;
-  } else if (state.personality.includes("サバサバ")) {
-    initialMsg = `おーお疲れ！急に連絡してどうしたん？笑`;
-  } else {
-    initialMsg = `やっほー！今日もお疲れ様〜！✨`;
+  // 初期挨拶を取得
+  const systemPrompt = buildSystemPrompt();
+  const initResponse = await callGemini(systemPrompt, "相手（ユーザー）に最初に話しかけてください。ユーザーのことが気になっていて興味を持っている会話の始まりにしてください。");
+  
+  try {
+    const json = JSON.parse(initResponse);
+    addMessage(json.reply, 'target');
+  } catch(e) {
+    addMessage(`やっほー！${state.name}だよ！今日は何知りたい〜？笑`, 'target');
   }
+}
 
-  addMessage(initialMsg, 'target');
+function buildSystemPrompt() {
+  return `
+あなたは恋愛シミュレーションのキャラクター「${state.name}」です。
+ユーザー（男性）とのLINEやチャットのやり取りを行います。
+
+【キャラクター設定】
+- 名前: ${state.name}
+- ジャンル: ${state.genre}
+- 年齢: ${state.age}
+- MBTI: ${state.mbti}
+- 性格: ${state.personality}
+- 雰囲気・口調: ${state.atmosphere}
+- 関係性: ${state.count}
+
+【最重要指示（会話スタイル）】
+- 定型文を一切使わず、本物のLINEのようなフランクな話し方（「w」「〜」「笑」「🥺」など雰囲気に応じて適宜使用）にしてください。
+- ユーザーに強い興味を持っており、必ず返信の中で「相手への質問」や「ユーザーのプライベート・趣味・考え方を深掘りする問いかけ」を自然に1つ以上入れてください。
+- 会答は長すぎず、1〜3文程度でリアルなテキスト感を出してください。
+
+【出力フォーマット】
+回答は必ず以下のJSON形式のみで出力してください（Markdownの\`\`\`jsonブロックは不要）：
+{
+  "reply": "女の子としての返信テキスト（ユーザーへの興味深々・質問含む）",
+  "score": "評価点数（100点満点）",
+  "advice": "ユーザーの返信に対するフィードバックとアドバイス（${state.fbStyle}の口調で）",
+  "bestExample": "こう送ればさらに好感度が上がったという模範回答例"
+}
+`;
 }
 
 function addMessage(text, type) {
@@ -169,144 +189,66 @@ function addMessage(text, type) {
   box.scrollTop = box.scrollHeight;
 }
 
-function sendMessage() {
+async function sendMessage() {
   const input = document.getElementById('user-input');
   const text = input.value.trim();
   if (!text) return;
 
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  btn.innerText = "送信中...";
+
   addMessage(text, 'user');
   input.value = '';
 
-  setTimeout(() => {
-    generateResponseAndFeedback(text);
-  }, 500);
+  const systemPrompt = buildSystemPrompt();
+  const rawResponse = await callGemini(systemPrompt, `ユーザーの発言: 「${text}」`);
+
+  try {
+    const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(cleanJson);
+    
+    addMessage(data.reply, 'target');
+
+    const fbBox = document.getElementById('feedback-box');
+    fbBox.style.display = 'block';
+    fbBox.innerHTML = `
+      <strong>【フィードバック】 評価：${data.score}</strong><br>
+      ${data.advice}<br>
+      <div style="margin-top:6px;"><strong>おすすめの送信例：</strong></div>
+      <div class="example-text">${data.bestExample}</div>
+    `;
+  } catch(e) {
+    addMessage("ん？電波悪いかも！もう一回送って〜！", 'target');
+  }
+
+  btn.disabled = false;
+  btn.innerText = "送信する";
 }
 
-function generateResponseAndFeedback(userText) {
-  let replyList = [];
-  let score = 75;
-  let advice = "";
-  let bestExample = "";
+async function callGemini(systemPrompt, userPrompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`;
+  
+  const payload = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+      }
+    ]
+  };
 
-  // 1. 口調・語尾・装飾のカスタマイズ
-  let suffix = "";
-  if (state.atmosphere.includes("ギャル")) suffix = "〜！笑";
-  else if (state.atmosphere.includes("地雷")) suffix = "…🥺";
-  else if (state.personality.includes("ツンデレ")) suffix = "だし…w";
-  else if (state.personality.includes("甘えん坊")) suffix = "〜！💕";
-  else if (state.personality.includes("サバサバ")) suffix = "笑";
-
-  // 2. 返信バリエーション構築（短文／好意／質問／疑問／雑談など）
-  if (userText.length <= 4) {
-    score = 40;
-    if (state.personality.includes("ツンデレ") || state.personality.includes("クール")) {
-      replyList = ["…ん？それだけ？w", "雑かよ笑", "短すぎて草。もうちょっと話してよ"];
-    } else if (state.atmosphere.includes("ギャル")) {
-      replyList = ["え短っ！ww ウケるんだけど笑", "一言すぎ！もっと話そうよ〜！"];
-    } else {
-      replyList = ["ん…？どうしたの？笑", "反応うす！なに考えてるの〜？"];
-    }
-    advice = "返信が短すぎます。相手がツッコミやすくしたり、話題を広げられる一言を追加しましょう。";
-    bestExample = `「そういえば${state.name}ちゃんって、最近ハマってることとかある？」`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    return data.candidates[0].content.parts[0].text;
+  } catch(e) {
+    return "エラーが発生しました。APIキーを確認してください。";
   }
-  else if (userText.includes("好き") || userText.includes("可愛い") || userText.includes("会いたい")) {
-    if (state.count.includes("初対面")) {
-      score = 45;
-      replyList = [
-        "えっ急に何！？笑 ちょっとびっくりしたかも笑",
-        "あ、ありがと…！でも急すぎてちょっと緊張する笑",
-        "みんなにそういうこと言ってるんじゃないの〜？笑"
-      ];
-      advice = `${state.genre}の初対面で直接的なアプローチをすると少し警戒されます。まずは内面や雰囲気を褒めるのが吉。`;
-      bestExample = `「${state.name}ちゃんの話しやすい雰囲気、すごく素敵だなって思った！」`;
-    } else {
-      score = 90;
-      replyList = [
-        `え〜照れるんだけど！！笑 ${state.name}もめっちゃ嬉しい💕`,
-        "急に言われるとドキッとするじゃん…！笑 ありがとう笑",
-        "ほんとに〜？w でもそう言ってもらえるの素直に嬉しい！"
-      ];
-      advice = "関係値に合った自然なアプローチができています！相手のテンションも上がっています。";
-      bestExample = `「今度もっとゆっくり話したいから、近いうちご飯行こうよ！」`;
-    }
-  }
-  else if (userText.includes("何") || userText.includes("気になって") || userText.includes("どう")) {
-    score = 80;
-    replyList = [
-      "あ、話すと長くなるんだけど最近〇〇にハマっててさ！笑",
-      "えっとね、この前友達と行ったカフェがめっちゃ美味しかった話！笑",
-      "実は今度のお休みにどこ行こうか迷ってたんだよね〜！"
-    ];
-    advice = "相手の言葉を拾って自然に会話を掘り下げられています。GOODです！";
-    bestExample = `「へえ！何系のカフェ？おすすめあったら教えてほしい！」`;
-  }
-  else if (userText.includes("どこ") || userText.includes("行こう") || userText.includes("ご飯")) {
-    if (state.count.includes("初対面")) {
-      score = 55;
-      replyList = [
-        "いいね！でもまだお互いよく知らないし、サクッとカフェとかからなら！笑",
-        "行きたーい！何好きなん？美味しいとこ教えて！"
-      ];
-      advice = "初対面でのお誘いは、重くならない「サクッとカフェ」程度の提案が成功率高めです。";
-      bestExample = `「いいね！来週の昼間とか、サクッと美味しいお茶でもしに行かない？」`;
-    } else {
-      score = 88;
-      replyList = [
-        "行きたい！✨ ちょうど美味しいお肉食べたいと思ってた笑",
-        "やった〜！いつ空いてる？予定合わせようよ！",
-        "いいね！じゃあ美味しいお店リサーチしとくね笑"
-      ];
-      advice = "関係性ができているためスムーズに誘えています。日程調整まで一気に進めましょう！";
-      bestExample = `「じゃあ来週の金曜か土曜あたりどう？都合いい方教えて！」`;
-    }
-  }
-  else {
-    score = 75;
-    replyList = [
-      `それめっちゃわかる！w てか今日こんなことあってさ〜聞いてよ！${suffix}`,
-      `あはは、確かにね！笑 てか${state.name}も最近それ気になってた！`,
-      `マジで？w ウケるんだけど。今度詳しく話してよ〜！`
-    ];
-    advice = "自然で友達感のある返信です。相手が話しやすいように最後を軽い質問で締めるとさらに良くなります。";
-    bestExample = `「それめっちゃわかるw ちなみに${state.name}ちゃんはどっち派？」`;
-  }
-
-  // 3. ランダム抽出＆前回と重ならない返信を選択
-  let selectedReply = replyList[Math.floor(Math.random() * replyList.length)];
-  if (selectedReply === lastReply && replyList.length > 1) {
-    selectedReply = replyList[(replyList.indexOf(selectedReply) + 1) % replyList.length];
-  }
-  lastReply = selectedReply;
-
-  // MBTIアドバイス補足
-  if (state.mbti) {
-    advice += `\n💡【${state.mbti}攻略メモ】: ノリを合わせつつ、相手の興味関心に寄り添った言葉選びが効果的です。`;
-  }
-
-  addMessage(selectedReply, 'target');
-
-  // フィードバックトーンの切替
-  let fbHeader = "";
-  if (state.fbStyle === 'strict') {
-    fbHeader = `🔥【スパルタコーチ】 評価：${score}点`;
-    advice = "【厳しく指導！】 " + advice;
-  } else if (state.fbStyle === 'friendly') {
-    fbHeader = `🌸【女子目線アドバイス】 評価：${score}点`;
-    advice = "【ここ意識して〜】 " + advice;
-  } else {
-    fbHeader = `📊【会話データ分析】 評価：${score}点`;
-    advice = "【要点分析】 " + advice;
-  }
-
-  // フィードバック表示
-  const fbBox = document.getElementById('feedback-box');
-  fbBox.style.display = 'block';
-  fbBox.innerHTML = `
-    <strong>${fbHeader}</strong><br>
-    ${advice}<br>
-    <div style="margin-top:8px;"><strong>おすすめの送信例：</strong></div>
-    <div class="example-text">${bestExample}</div>
-  `;
 }
 </script>
 
