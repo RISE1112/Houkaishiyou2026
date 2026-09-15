@@ -13,7 +13,6 @@
   button { background: #007aff; color: #fff; font-weight: bold; border: none; margin-top: 15px; }
   button:active { opacity: 0.8; }
   
-  /* APIガイド用の特別スタイル */
   .api-guide-box { background: #f0f7ff; border: 1px solid #007aff; padding: 12px; border-radius: 10px; margin-top: 8px; font-size: 0.83rem; line-height: 1.5; color: #1c1c1e; }
   .api-guide-box ol { margin: 6px 0 8px 0; padding-left: 20px; }
   .api-guide-box li { margin-bottom: 4px; }
@@ -23,6 +22,7 @@
   .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 0.92rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
   .target { background: #e9e9eb; color: #000; align-self: flex-start; border-bottom-left-radius: 2px; }
   .user { background: #007aff; color: #fff; align-self: flex-end; border-bottom-right-radius: 2px; }
+  
   .feedback { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 10px; line-height: 1.5; }
   .example-text { background: #fff; padding: 8px; border-radius: 6px; border: 1px dashed #ffd591; margin-top: 6px; color: #d46b08; font-weight: bold; }
 </style>
@@ -134,6 +134,7 @@
 
 <script>
 let state = {};
+let chatHistory = []; // 会話履歴を保持する配列
 
 async function startChat() {
   const apiKey = document.getElementById('api-key').value.trim();
@@ -155,21 +156,28 @@ async function startChat() {
   document.getElementById('chat-card').style.display = 'block';
   document.getElementById('chat-title').innerText = `${state.name} とのリアルAIチャット`;
 
-  const systemPrompt = buildSystemPrompt();
-  const initResponse = await callGemini(systemPrompt, "相手（ユーザー）に最初に話しかけてください。ユーザーのことが気になっていて興味を持っている会話の始まりにしてください。");
-  
-  try {
-    const cleanJson = initResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    const json = JSON.parse(cleanJson);
-    addMessage(json.reply, 'target');
-  } catch(e) {
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  btn.innerText = "通信中...";
+
+  // 初回発言のリスエスト
+  const initPrompt = "相手（ユーザー）に最初に話しかけてください。ユーザーのことが気になっていて興味を持っている会話の始まりにしてください。";
+  const data = await callGeminiAPI(initPrompt);
+
+  if (data && data.reply) {
+    addMessage(data.reply, 'target');
+    // AIの初回返信を会話履歴に追加
+    chatHistory.push({ role: "model", parts: [{ text: data.reply }] });
+  } else {
     addMessage(`やっほー！${state.name}だよ！今日は何知りたい〜？笑`, 'target');
   }
+
+  btn.disabled = false;
+  btn.innerText = "送信する";
 }
 
-function buildSystemPrompt() {
-  return `
-あなたは恋愛シミュレーションのキャラクター「${state.name}」です。
+function buildSystemInstruction() {
+  return `あなたは恋愛シミュレーションのキャラクター「${state.name}」です。
 ユーザー（男性）とのLINEやチャットのやり取りを行います。
 
 【キャラクター設定】
@@ -181,20 +189,19 @@ function buildSystemPrompt() {
 - 雰囲気・口調: ${state.atmosphere}
 - 関係性: ${state.count}
 
-【最重要指示（会話スタイル）】
-- 定型文を一切使わず、本物のLINEのようなフランクな話し方（「w」「〜」「笑」「🥺」など雰囲気に応じて適宜使用）にしてください。
-- ユーザーに強い興味を持っており、必ず返信の中で「相手への質問」や「ユーザーのプライベート・趣味・考え方を深掘りする問いかけ」を自然に1つ以上入れてください。
-- 回答は長すぎず、1〜3文程度でリアルなテキスト感を出してください。
+【重要指示】
+- 直前の会話の流れを踏まえ、定型文を一切使わずリアルな人間として返信してください。
+- ユーザーに強い興味を持っており、必ず返信の中にユーザーへの質問や深掘りの問いかけを自然に1つ以上入れてください。
+- 1回のラリーごとに、必ずユーザーの直前発言に対するフィードバックと模範回答（bestExample）を出力してください。
 
-【出力フォーマット】
-回答は必ず以下のJSON形式のみで出力してください（Markdownの\`\`\`jsonブロックは不要）：
+【出力形式】
+必ず以下のJSON構造のみで応答してください：
 {
-  "reply": "女の子としての返信テキスト（ユーザーへの興味津々・質問含む）",
+  "reply": "女の子としての返信テキスト（質問や興味を含む）",
   "score": "評価点数（100点満点）",
-  "advice": "ユーザーの返信に対するフィードバックとアドバイス（${state.fbStyle}の口調で）",
-  "bestExample": "こう送ればさらに好感度が上がったという模範回答例"
-}
-`;
+  "advice": "ユーザーの直前発言に対するフィードバック（${state.fbStyle}の口調で）",
+  "bestExample": "こう送ればさらに良かった模範メッセージ例"
+}`;
 }
 
 function addMessage(text, type) {
@@ -218,41 +225,44 @@ async function sendMessage() {
   addMessage(text, 'user');
   input.value = '';
 
-  const systemPrompt = buildSystemPrompt();
-  const rawResponse = await callGemini(systemPrompt, `ユーザーの発言: 「${text}」`);
+  // ユーザーの入力メッセージを会話履歴に追加
+  chatHistory.push({ role: "user", parts: [{ text: text }] });
 
-  try {
-    const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(cleanJson);
-    
+  const data = await callGeminiAPI(text);
+
+  if (data && data.reply) {
     addMessage(data.reply, 'target');
+    // AIの返信を会話履歴に追加（次回以降の文脈保持）
+    chatHistory.push({ role: "model", parts: [{ text: data.reply }] });
 
+    // 毎ラリー確実にフィードバックを表示
     const fbBox = document.getElementById('feedback-box');
     fbBox.style.display = 'block';
     fbBox.innerHTML = `
-      <strong>【フィードバック】 評価：${data.score}</strong><br>
-      ${data.advice}<br>
+      <strong>【フィードバック】 評価：${data.score || "80点"}</strong><br>
+      ${data.advice || "自然なやり取りができています！"}<br>
       <div style="margin-top:6px;"><strong>おすすめの送信例：</strong></div>
-      <div class="example-text">${data.bestExample}</div>
+      <div class="example-text">${data.bestExample || "「そうなんだ！もっと教えて〜！」"}</div>
     `;
-  } catch(e) {
-    addMessage("ん？電波悪いかも！もう一回送って〜！", 'target');
+  } else {
+    addMessage("ごめん、ちょっと回線悪くてうまく聞こえなかった！もう一回送って！", 'target');
   }
 
   btn.disabled = false;
   btn.innerText = "送信する";
 }
 
-async function callGemini(systemPrompt, userPrompt) {
+async function callGeminiAPI(latestUserText) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`;
   
   const payload = {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
-      }
-    ]
+    system_instruction: {
+      parts: [{ text: buildSystemInstruction() }]
+    },
+    contents: chatHistory.length > 0 ? chatHistory : [{ role: "user", parts: [{ text: latestUserText }] }],
+    generationConfig: {
+      responseMimeType: "application/json"
+    }
   };
 
   try {
@@ -261,10 +271,12 @@ async function callGemini(systemPrompt, userPrompt) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    return data.candidates[0].content.parts[0].text;
+    const result = await res.json();
+    const rawText = result.candidates[0].content.parts[0].text;
+    return JSON.parse(rawText);
   } catch(e) {
-    return "エラーが発生しました。APIキーを確認してください。";
+    console.error("API Error:", e);
+    return null;
   }
 }
 </script>
