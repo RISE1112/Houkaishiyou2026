@@ -12,6 +12,8 @@
   select, input, button { width: 100%; padding: 10px; margin-top: 4px; border-radius: 8px; border: 1px solid #ccc; font-size: 0.95rem; box-sizing: border-box; }
   button { background: #007aff; color: #fff; font-weight: bold; border: none; margin-top: 15px; }
   button:active { opacity: 0.8; }
+  .api-guide { background: #eef6ff; border: 1px solid #b3d8pt; padding: 10px; border-radius: 8px; font-size: 0.82rem; margin-top: 6px; line-height: 1.4; }
+  .api-guide a { color: #007aff; font-weight: bold; text-decoration: underline; }
   #chat-box { height: 320px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
   .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 0.92rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
   .target { background: #e9e9eb; color: #000; align-self: flex-start; border-bottom-left-radius: 2px; }
@@ -25,8 +27,13 @@
 <div class="card" id="setup-card">
   <h2>ターゲット＆システム設定</h2>
   
-  <label>API Key（Google AI Studioで無料発行）</label>
-  <input type="password" id="api-key" placeholder="AIStudioのAPIキーを入力">
+  <label>API Key（Google AI Studio）</label>
+  <input type="password" id="api-key" placeholder="AIStudioのAPIキーを貼り付け">
+  
+  <div class="api-guide">
+    💡 APIキーを未取得の方は、以下の公式リンクから無料で即時発行できます。<br>
+    👉 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI StudioでAPIキーを取得する（無料）</a>
+  </div>
 
   <label>相手の名前</label>
   <input type="text" id="target-name" placeholder="例: りょうか">
@@ -71,7 +78,7 @@
   <label>性格</label>
   <select id="personality">
     <option>ノリが良く質問魔・興味津々</option>
-    <option>ツンデレ・実は興味深々</option>
+    <option>ツンデレ・実は興味津々</option>
     <option>明るい・甘えん坊でかまってちゃん</option>
     <option>サバサバ系だが質問は多め</option>
     <option>おとなしいが話を聞きたがる</option>
@@ -82,7 +89,7 @@
     <option>ギャル系（リアクション大きめ）</option>
     <option>清楚系（丁寧だが興味津々）</option>
     <option>地雷系・サブカル（執着心あり）</option>
-    <option>大人っぽい・お姉さん系（上手質問）</option>
+    <option>大人っぽい・お姉さん系（質問上手）</option>
     <option>あざと可愛い・量産型</option>
   </select>
 
@@ -116,7 +123,6 @@
 
 <script>
 let state = {};
-let history = [];
 
 async function startChat() {
   const apiKey = document.getElementById('api-key').value.trim();
@@ -138,12 +144,12 @@ async function startChat() {
   document.getElementById('chat-card').style.display = 'block';
   document.getElementById('chat-title').innerText = `${state.name} とのリアルAIチャット`;
 
-  // 初期挨拶を取得
   const systemPrompt = buildSystemPrompt();
   const initResponse = await callGemini(systemPrompt, "相手（ユーザー）に最初に話しかけてください。ユーザーのことが気になっていて興味を持っている会話の始まりにしてください。");
   
   try {
-    const json = JSON.parse(initResponse);
+    const cleanJson = initResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    const json = JSON.parse(cleanJson);
     addMessage(json.reply, 'target');
   } catch(e) {
     addMessage(`やっほー！${state.name}だよ！今日は何知りたい〜？笑`, 'target');
@@ -167,12 +173,12 @@ function buildSystemPrompt() {
 【最重要指示（会話スタイル）】
 - 定型文を一切使わず、本物のLINEのようなフランクな話し方（「w」「〜」「笑」「🥺」など雰囲気に応じて適宜使用）にしてください。
 - ユーザーに強い興味を持っており、必ず返信の中で「相手への質問」や「ユーザーのプライベート・趣味・考え方を深掘りする問いかけ」を自然に1つ以上入れてください。
-- 会答は長すぎず、1〜3文程度でリアルなテキスト感を出してください。
+- 回答は長すぎず、1〜3文程度でリアルなテキスト感を出してください。
 
 【出力フォーマット】
 回答は必ず以下のJSON形式のみで出力してください（Markdownの\`\`\`jsonブロックは不要）：
 {
-  "reply": "女の子としての返信テキスト（ユーザーへの興味深々・質問含む）",
+  "reply": "女の子としての返信テキスト（ユーザーへの興味津々・質問含む）",
   "score": "評価点数（100点満点）",
   "advice": "ユーザーの返信に対するフィードバックとアドバイス（${state.fbStyle}の口調で）",
   "bestExample": "こう送ればさらに好感度が上がったという模範回答例"
