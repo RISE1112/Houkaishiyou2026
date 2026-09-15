@@ -12,8 +12,13 @@
   select, input, button { width: 100%; padding: 10px; margin-top: 4px; border-radius: 8px; border: 1px solid #ccc; font-size: 0.95rem; box-sizing: border-box; }
   button { background: #007aff; color: #fff; font-weight: bold; border: none; margin-top: 15px; }
   button:active { opacity: 0.8; }
-  .api-guide { background: #eef6ff; border: 1px solid #b3d8pt; padding: 10px; border-radius: 8px; font-size: 0.82rem; margin-top: 6px; line-height: 1.4; }
-  .api-guide a { color: #007aff; font-weight: bold; text-decoration: underline; }
+  
+  /* APIガイド用の特別スタイル */
+  .api-guide-box { background: #f0f7ff; border: 1px solid #007aff; padding: 12px; border-radius: 10px; margin-top: 8px; font-size: 0.83rem; line-height: 1.5; color: #1c1c1e; }
+  .api-guide-box ol { margin: 6px 0 8px 0; padding-left: 20px; }
+  .api-guide-box li { margin-bottom: 4px; }
+  .api-link-btn { display: inline-block; width: 100%; text-align: center; background: #34c759; color: #fff; font-weight: bold; padding: 10px; border-radius: 8px; text-decoration: none; margin-top: 6px; box-sizing: border-box; }
+  
   #chat-box { height: 320px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
   .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 0.92rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
   .target { background: #e9e9eb; color: #000; align-self: flex-start; border-bottom-left-radius: 2px; }
@@ -27,15 +32,21 @@
 <div class="card" id="setup-card">
   <h2>ターゲット＆システム設定</h2>
   
-  <label>API Key（Google AI Studio）</label>
-  <input type="password" id="api-key" placeholder="AIStudioのAPIキーを貼り付け">
+  <label>1. Google AI Studio API Key</label>
+  <input type="password" id="api-key" placeholder="AIStudioで取得したキーを貼り付け">
   
-  <div class="api-guide">
-    💡 APIキーを未取得の方は、以下の公式リンクから無料で即時発行できます。<br>
-    👉 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI StudioでAPIキーを取得する（無料）</a>
+  <div class="api-guide-box">
+    <strong>🔑 APIキーの取得方法（完全無料）</strong>
+    <ol>
+      <li>下のボタンからGoogle AI Studioを開きます。</li>
+      <li>Googleアカウントでログインします。</li>
+      <li><strong>「Create API key」</strong>をタップします。</li>
+      <li>表示された英数字のコードをコピーして上に貼り付けます。</li>
+    </ol>
+    <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-link-btn">👉 Google AI Studioを開いてキーを取得</a>
   </div>
 
-  <label>相手の名前</label>
+  <label>2. 相手の名前</label>
   <input type="text" id="target-name" placeholder="例: りょうか">
 
   <label>ジャンル</label>
