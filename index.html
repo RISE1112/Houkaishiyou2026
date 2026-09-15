@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>恋愛会話シミュレーター</title>
+<title>リアル恋愛会話シミュレーター</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f2f2f7; margin: 0; padding: 15px; color: #333; }
   .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
@@ -12,12 +12,12 @@
   select, input, button { width: 100%; padding: 10px; margin-top: 4px; border-radius: 8px; border: 1px solid #ccc; font-size: 0.95rem; box-sizing: border-box; }
   button { background: #007aff; color: #fff; font-weight: bold; border: none; margin-top: 15px; }
   button:active { opacity: 0.8; }
-  #chat-box { height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
-  .msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; line-height: 1.4; white-space: pre-wrap; }
-  .target { background: #e9e9eb; align-self: flex-start; border-bottom-left-radius: 2px; }
+  #chat-box { height: 320px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 0.92rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .target { background: #e9e9eb; color: #000; align-self: flex-start; border-bottom-left-radius: 2px; }
   .user { background: #007aff; color: #fff; align-self: flex-end; border-bottom-right-radius: 2px; }
-  .feedback { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 10px; line-height: 1.4; }
-  .example-text { background: #fff; padding: 6px; border-radius: 4px; border: 1px dashed #ffd591; margin-top: 4px; color: #d46b08; font-weight: bold; }
+  .feedback { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 10px; line-height: 1.5; }
+  .example-text { background: #fff; padding: 8px; border-radius: 6px; border: 1px dashed #ffd591; margin-top: 6px; color: #d46b08; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -26,7 +26,7 @@
   <h2>ターゲット設定</h2>
   
   <label>相手の名前</label>
-  <input type="text" id="target-name" placeholder="例: あすか（未入力なら『ちゃん』付け）">
+  <input type="text" id="target-name" placeholder="例: りょうか（未入力なら『ちゃん』付け）">
 
   <label>ジャンル</label>
   <select id="genre">
@@ -65,28 +65,35 @@
     <option>ENTJ (指揮官)</option>
   </select>
 
-  <label>性格</label>
+  <label>性格（バリエーション大幅拡張）</label>
   <select id="personality">
     <option>ツンデレ・警戒心高め</option>
     <option>明るい・フレンドリー</option>
     <option>おとなしい・控えめ</option>
     <option>ノリが良い・かまってちゃん</option>
+    <option>サバサバ・姉御肌</option>
+    <option>甘えん坊・ド天然</option>
+    <option>サディスティック・小悪魔</option>
+    <option>クーデレ・クール</option>
   </select>
 
-  <label>雰囲気</label>
+  <label>雰囲気（スタイル拡張）</label>
   <select id="atmosphere">
     <option>清楚系</option>
-    <option>地雷・地雷系</option>
+    <option>地雷系・サブカル</option>
     <option>ギャル系</option>
     <option>大人っぽい・お姉さん系</option>
+    <option>量産型・あざと系</option>
+    <option>サブカル病み系</option>
+    <option>ボーイッシュ・スポーティ</option>
   </select>
 
-  <label>会った回数</label>
+  <label>会った回数・関係性</label>
   <select id="count">
     <option>初対面（1回目）</option>
     <option>2〜3回目（少し慣れてきた）</option>
     <option>4〜5回目（そこそこ親しい）</option>
-    <option>常連（何度も会っている）</option>
+    <option>常連・タメ口で話せる仲</option>
   </select>
 
   <label>フィードバックの雰囲気（口調）</label>
@@ -113,6 +120,7 @@
 
 <script>
 let state = {};
+let lastReply = ""; // 重複防止用
 
 function startChat() {
   const nameInput = document.getElementById('target-name').value.trim();
@@ -131,16 +139,22 @@ function startChat() {
   document.getElementById('chat-card').style.display = 'block';
   document.getElementById('chat-title').innerText = `${state.name} との会話`;
 
-  // 初期メッセージの設定（雰囲気やジャンルに応じた挨拶）
-  let initialMsg = `こんにちは！${state.name}だよ。よろしくね！`;
+  // 会話スタート時の初期メッセージ生成
+  let initialMsg = "";
   if (state.genre.includes("コンカフェ")) {
-    initialMsg = state.atmosphere.includes("地雷") ? `いらっしゃい〜お給仕中だよあいにきてくれてありがと…🖤` : `おかえりなさいませっ！今日も会えて嬉しいな✨`;
+    initialMsg = state.atmosphere.includes("地雷") ? 
+      `あ、いらっしゃい〜🖤 今日もお給仕がんばってるよ、あいにきてくれてありがと…！` : 
+      `おかえりなさい〜！✨ 今日も話せてめっちゃ嬉しい！何飲む〜？`;
   } else if (state.genre.includes("地下")) {
-    initialMsg = `今日もお話できて嬉しい！来てくれてありがと〜！！`;
+    initialMsg = `今日もお話しにきてくれてありがと〜！！💕 めっちゃ会いたかった！`;
   } else if (state.personality.includes("ツンデレ")) {
-    initialMsg = `…何？用事あるなら聞くけど。`;
+    initialMsg = `…何？別に待ってたわけじゃないけど笑`;
   } else if (state.atmosphere.includes("ギャル")) {
-    initialMsg = `やっほー！今日めっちゃテンション上がるわ〜笑`;
+    initialMsg = `やっほ〜！今日マジで暑くない？笑 何してたんー？`;
+  } else if (state.personality.includes("サバサバ")) {
+    initialMsg = `おーお疲れ！急に連絡してどうしたん？笑`;
+  } else {
+    initialMsg = `やっほー！今日もお疲れ様〜！✨`;
   }
 
   addMessage(initialMsg, 'target');
@@ -165,87 +179,123 @@ function sendMessage() {
 
   setTimeout(() => {
     generateResponseAndFeedback(text);
-  }, 600);
+  }, 500);
 }
 
 function generateResponseAndFeedback(userText) {
-  let reply = "";
+  let replyList = [];
   let score = 75;
   let advice = "";
   let bestExample = "";
 
-  // 性格・口調のトーン設定
-  let toneSuffix = "";
-  if (state.atmosphere.includes("ギャル")) toneSuffix = "〜！笑";
-  else if (state.atmosphere.includes("地雷")) toneSuffix = "…🥺";
-  else if (state.personality.includes("ツンデレ")) toneSuffix = "だし…";
+  // 1. 口調・語尾・装飾のカスタマイズ
+  let suffix = "";
+  if (state.atmosphere.includes("ギャル")) suffix = "〜！笑";
+  else if (state.atmosphere.includes("地雷")) suffix = "…🥺";
+  else if (state.personality.includes("ツンデレ")) suffix = "だし…w";
+  else if (state.personality.includes("甘えん坊")) suffix = "〜！💕";
+  else if (state.personality.includes("サバサバ")) suffix = "笑";
 
-  // 1. 返信の分岐（文脈判定）
-  if (userText.length < 5) {
+  // 2. 返信バリエーション構築（短文／好意／質問／疑問／雑談など）
+  if (userText.length <= 4) {
     score = 40;
-    if (state.personality.includes("ツンデレ")) {
-      reply = `は？なにそれ、それだけ？${toneSuffix}`;
+    if (state.personality.includes("ツンデレ") || state.personality.includes("クール")) {
+      replyList = ["…ん？それだけ？w", "雑かよ笑", "短すぎて草。もうちょっと話してよ"];
+    } else if (state.atmosphere.includes("ギャル")) {
+      replyList = ["え短っ！ww ウケるんだけど笑", "一言すぎ！もっと話そうよ〜！"];
     } else {
-      reply = `うん…？それだけ〜？${toneSuffix}`;
+      replyList = ["ん…？どうしたの？笑", "反応うす！なに考えてるの〜？"];
     }
-    advice = "返信が短すぎて話が広がりにくくなっています。質問を足すなどコミュニケーションのきっかけを作りましょう。";
-    bestExample = `「そういえば${state.name}ちゃんって、休みの日は何して過ごすことが多い？」`;
-  } 
-  else if (userText.includes("可愛い") || userText.includes("好き")) {
+    advice = "返信が短すぎます。相手がツッコミやすくしたり、話題を広げられる一言を追加しましょう。";
+    bestExample = `「そういえば${state.name}ちゃんって、最近ハマってることとかある？」`;
+  }
+  else if (userText.includes("好き") || userText.includes("可愛い") || userText.includes("会いたい")) {
     if (state.count.includes("初対面")) {
       score = 45;
-      reply = state.personality.includes("ツンデレ") ? `…急に何言ってるの？気安く言わないで。` : `え、あ…ありがとうございます（ちょっと驚いている）`;
-      advice = `${state.genre}の初対面でいきなり外見や直球の好意を伝えると警戒されます。`;
-      bestExample = `「${state.name}ちゃんの話しやすい雰囲気、すごく素敵だと思う！」`;
+      replyList = [
+        "えっ急に何！？笑 ちょっとびっくりしたかも笑",
+        "あ、ありがと…！でも急すぎてちょっと緊張する笑",
+        "みんなにそういうこと言ってるんじゃないの〜？笑"
+      ];
+      advice = `${state.genre}の初対面で直接的なアプローチをすると少し警戒されます。まずは内面や雰囲気を褒めるのが吉。`;
+      bestExample = `「${state.name}ちゃんの話しやすい雰囲気、すごく素敵だなって思った！」`;
     } else {
       score = 90;
-      reply = `えーっホントに！？嬉しいな…照れる笑`;
-      advice = "関係性ができている状態での自然なアプローチです。好感度アップ！";
-      bestExample = `「いつも〇〇ちゃんの頑張ってる姿見てて可愛いなと思ってたんだよね」`;
+      replyList = [
+        `え〜照れるんだけど！！笑 ${state.name}もめっちゃ嬉しい💕`,
+        "急に言われるとドキッとするじゃん…！笑 ありがとう笑",
+        "ほんとに〜？w でもそう言ってもらえるの素直に嬉しい！"
+      ];
+      advice = "関係値に合った自然なアプローチができています！相手のテンションも上がっています。";
+      bestExample = `「今度もっとゆっくり話したいから、近いうちご飯行こうよ！」`;
     }
-  } 
+  }
+  else if (userText.includes("何") || userText.includes("気になって") || userText.includes("どう")) {
+    score = 80;
+    replyList = [
+      "あ、話すと長くなるんだけど最近〇〇にハマっててさ！笑",
+      "えっとね、この前友達と行ったカフェがめっちゃ美味しかった話！笑",
+      "実は今度のお休みにどこ行こうか迷ってたんだよね〜！"
+    ];
+    advice = "相手の言葉を拾って自然に会話を掘り下げられています。GOODです！";
+    bestExample = `「へえ！何系のカフェ？おすすめあったら教えてほしい！」`;
+  }
   else if (userText.includes("どこ") || userText.includes("行こう") || userText.includes("ご飯")) {
     if (state.count.includes("初対面")) {
-      score = 60;
-      reply = `うーん、まだ会ったばかりだし、もう少し仲良くなってからかな…！`;
-      advice = "初対面からの急な誘いは警戒されます。まずは会話で共通の趣味を見つけましょう。";
-      bestExample = `「${state.name}ちゃんって甘いもの好き？おすすめのカフェがあるから今度教えてあげるね！」`;
+      score = 55;
+      replyList = [
+        "いいね！でもまだお互いよく知らないし、サクッとカフェとかからなら！笑",
+        "行きたーい！何好きなん？美味しいとこ教えて！"
+      ];
+      advice = "初対面でのお誘いは、重くならない「サクッとカフェ」程度の提案が成功率高めです。";
+      bestExample = `「いいね！来週の昼間とか、サクッと美味しいお茶でもしに行かない？」`;
     } else {
-      score = 85;
-      reply = `いいね！行きたい！何食べに行く〜？✨`;
-      advice = "関係性が構築できているため、スムーズに次のステップに誘えています。";
-      bestExample = `「来週あたり、気になってた〇〇のお店一緒に行かない？」`;
+      score = 88;
+      replyList = [
+        "行きたい！✨ ちょうど美味しいお肉食べたいと思ってた笑",
+        "やった〜！いつ空いてる？予定合わせようよ！",
+        "いいね！じゃあ美味しいお店リサーチしとくね笑"
+      ];
+      advice = "関係性ができているためスムーズに誘えています。日程調整まで一気に進めましょう！";
+      bestExample = `「じゃあ来週の金曜か土曜あたりどう？都合いい方教えて！」`;
     }
-  } 
+  }
   else {
     score = 75;
-    if (state.personality.includes("ノリが良い")) {
-      reply = `まじ！？それめっちゃわかる〜！もっと詳しく教えて！${toneSuffix}`;
-    } else {
-      reply = `そうなんだね！${state.name}もそれ気になってたんだよね。`;
-    }
-    advice = "自然な相槌で会話は継続できています。もう一歩踏み込んだ話題を投げかけるとさらにGOODです。";
-    bestExample = `「そうなんだ！ちなみに${state.name}ちゃんは最近ハマってることとかある？」`;
+    replyList = [
+      `それめっちゃわかる！w てか今日こんなことあってさ〜聞いてよ！${suffix}`,
+      `あはは、確かにね！笑 てか${state.name}も最近それ気になってた！`,
+      `マジで？w ウケるんだけど。今度詳しく話してよ〜！`
+    ];
+    advice = "自然で友達感のある返信です。相手が話しやすいように最後を軽い質問で締めるとさらに良くなります。";
+    bestExample = `「それめっちゃわかるw ちなみに${state.name}ちゃんはどっち派？」`;
   }
 
-  // MBTIに関する追加アドバイス（選択されている場合）
+  // 3. ランダム抽出＆前回と重ならない返信を選択
+  let selectedReply = replyList[Math.floor(Math.random() * replyList.length)];
+  if (selectedReply === lastReply && replyList.length > 1) {
+    selectedReply = replyList[(replyList.indexOf(selectedReply) + 1) % replyList.length];
+  }
+  lastReply = selectedReply;
+
+  // MBTIアドバイス補足
   if (state.mbti) {
-    advice += `\n💡【${state.mbti}攻略のワンポイント】: 相手のタイプに合わせたテンポ感や共感の仕方を意識するとさらに刺さります。`;
+    advice += `\n💡【${state.mbti}攻略メモ】: ノリを合わせつつ、相手の興味関心に寄り添った言葉選びが効果的です。`;
   }
 
-  addMessage(reply, 'target');
+  addMessage(selectedReply, 'target');
 
-  // フィードバックの口調切り替え
+  // フィードバックトーンの切替
   let fbHeader = "";
   if (state.fbStyle === 'strict') {
-    fbHeader = `🔥【スパルタコーチ評】 評価：${score}点`;
-    advice = "【喝！】" + advice;
+    fbHeader = `🔥【スパルタコーチ】 評価：${score}点`;
+    advice = "【厳しく指導！】 " + advice;
   } else if (state.fbStyle === 'friendly') {
-    fbHeader = `🌸【女子目線のアドバイス】 評価：${score}点`;
-    advice = "【ここポイントだよ〜】" + advice;
+    fbHeader = `🌸【女子目線アドバイス】 評価：${score}点`;
+    advice = "【ここ意識して〜】 " + advice;
   } else {
-    fbHeader = `📊【分析レポート】 評価：${score}点`;
-    advice = "【分析】" + advice;
+    fbHeader = `📊【会話データ分析】 評価：${score}点`;
+    advice = "【要点分析】 " + advice;
   }
 
   // フィードバック表示
