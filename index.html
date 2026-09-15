@@ -1,132 +1,264 @@
-// ============================================================
-// 会話練習チャット用 Anthropic API プロキシ (Cloudflare Worker)
-// ============================================================
-// フロントエンド(index.html / rise1112.github.io)から system と
-// messages だけを受け取り、このWorkerがサーバー側に保管した
-// ANTHROPIC_API_KEY を付けて api.anthropic.com に転送します。
-// これにより、APIキーをブラウザ側のコード(=誰でも見られるGitHubの
-// リポジトリ)に書かずに済みます。
-//
-// デプロイ手順は README.md を参照してください。
-// ============================================================
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>恋愛会話シミュレーター</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f2f2f7; margin: 0; padding: 15px; color: #333; }
+  .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  h2, h3 { margin-top: 0; font-size: 1.1rem; color: #1c1c1e; }
+  label { font-size: 0.85rem; font-weight: bold; color: #666; display: block; margin-top: 10px; }
+  select, input, button { width: 100%; padding: 10px; margin-top: 4px; border-radius: 8px; border: 1px solid #ccc; font-size: 0.95rem; box-sizing: border-box; }
+  button { background: #007aff; color: #fff; font-weight: bold; border: none; margin-top: 15px; }
+  button:active { opacity: 0.8; }
+  #chat-box { height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; line-height: 1.4; white-space: pre-wrap; }
+  .target { background: #e9e9eb; align-self: flex-start; border-bottom-left-radius: 2px; }
+  .user { background: #007aff; color: #fff; align-self: flex-end; border-bottom-right-radius: 2px; }
+  .feedback { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 10px; line-height: 1.4; }
+  .example-text { background: #fff; padding: 6px; border-radius: 4px; border: 1px dashed #ffd591; margin-top: 4px; color: #d46b08; font-weight: bold; }
+</style>
+</head>
+<body>
 
-// あなたのGitHub PagesのURL。ここ以外のサイトからのリクエストは拒否する。
-const ALLOWED_ORIGIN = 'https://rise1112.github.io';
+<div class="card" id="setup-card">
+  <h2>ターゲット設定</h2>
+  
+  <label>相手の名前</label>
+  <input type="text" id="target-name" placeholder="例: あすか（未入力なら『ちゃん』付け）">
 
-const MODEL = 'claude-sonnet-5';
-const MAX_TOKENS = 700;
+  <label>ジャンル</label>
+  <select id="genre">
+    <option>一般女性</option>
+    <option>アイドル</option>
+    <option>地下アイドル</option>
+    <option>コンカフェ嬢</option>
+  </select>
 
-// 1つのIPが1日に送れるメッセージ数の上限。青天井の「完全無制限」は
-// 誰かに乱用された場合に高額請求につながるため、必ず何らかの上限を設けることを推奨します。
-const DAILY_LIMIT_PER_IP = 60;
+  <label>年齢</label>
+  <select id="age">
+    <option>15〜19歳</option>
+    <option>20〜24歳</option>
+    <option>25〜29歳</option>
+    <option>30〜34歳</option>
+  </select>
 
-// 1リクエストで送られてくる会話履歴の最大メッセージ数(異常に長い会話を防ぐ)
-const MAX_HISTORY_MESSAGES = 80;
+  <label>MBTI（任意）</label>
+  <select id="mbti">
+    <option value="">未選択</option>
+    <option>ENFP (運動家)</option>
+    <option>INFP (仲介者)</option>
+    <option>INFJ (提唱者)</option>
+    <option>INTJ (建築家)</option>
+    <option>ESFP (エンターテイナー)</option>
+    <option>ISFP (冒険家)</option>
+    <option>ESTP (起業家)</option>
+    <option>ISTP (巨匠)</option>
+    <option>ENTP (討論者)</option>
+    <option>INTP (論理学者)</option>
+    <option>ESFJ (領事)</option>
+    <option>ISFJ (擁護者)</option>
+    <option>ESTJ (幹部)</option>
+    <option>ISTJ (管理者)</option>
+    <option>ENFJ (主人公)</option>
+    <option>ENTJ (指揮官)</option>
+  </select>
 
-function corsHeaders(origin) {
-  const allow = (origin === ALLOWED_ORIGIN) ? origin : ALLOWED_ORIGIN;
-  return {
-    'Access-Control-Allow-Origin': allow,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Vary': 'Origin'
+  <label>性格</label>
+  <select id="personality">
+    <option>ツンデレ・警戒心高め</option>
+    <option>明るい・フレンドリー</option>
+    <option>おとなしい・控えめ</option>
+    <option>ノリが良い・かまってちゃん</option>
+  </select>
+
+  <label>雰囲気</label>
+  <select id="atmosphere">
+    <option>清楚系</option>
+    <option>地雷・地雷系</option>
+    <option>ギャル系</option>
+    <option>大人っぽい・お姉さん系</option>
+  </select>
+
+  <label>会った回数</label>
+  <select id="count">
+    <option>初対面（1回目）</option>
+    <option>2〜3回目（少し慣れてきた）</option>
+    <option>4〜5回目（そこそこ親しい）</option>
+    <option>常連（何度も会っている）</option>
+  </select>
+
+  <label>フィードバックの雰囲気（口調）</label>
+  <select id="fb-style">
+    <option value="strict">厳しい恋愛コーチ（スパルタアドバイス）</option>
+    <option value="friendly">優しい女友達（共感＆サポート）</option>
+    <option value="logical">論理的なアドバイザー（データ・戦略重視）</option>
+  </select>
+
+  <button onclick="startChat()">会話をスタートする</button>
+</div>
+
+<div class="card" id="chat-card" style="display:none;">
+  <h3 id="chat-title">チャット</h3>
+  <div id="chat-box"></div>
+
+  <div id="feedback-box" class="feedback" style="display:none;"></div>
+
+  <div style="margin-top: 10px;">
+    <input type="text" id="user-input" placeholder="メッセージを入力...">
+    <button onclick="sendMessage()">送信する</button>
+  </div>
+</div>
+
+<script>
+let state = {};
+
+function startChat() {
+  const nameInput = document.getElementById('target-name').value.trim();
+  state = {
+    name: nameInput || "女の子",
+    genre: document.getElementById('genre').value,
+    age: document.getElementById('age').value,
+    mbti: document.getElementById('mbti').value,
+    personality: document.getElementById('personality').value,
+    atmosphere: document.getElementById('atmosphere').value,
+    count: document.getElementById('count').value,
+    fbStyle: document.getElementById('fb-style').value
   };
-}
 
-function jsonError(origin, status, message) {
-  return new Response(
-    JSON.stringify({ type: 'error', error: { type: 'invalid_request', message } }),
-    { status, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' } }
-  );
-}
+  document.getElementById('setup-card').style.display = 'none';
+  document.getElementById('chat-card').style.display = 'block';
+  document.getElementById('chat-title').innerText = `${state.name} との会話`;
 
-export default {
-  async fetch(request, env) {
-    const origin = request.headers.get('Origin') || '';
-
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders(origin) });
-    }
-
-    if (request.method !== 'POST') {
-      return jsonError(origin, 405, 'Method not allowed');
-    }
-
-    if (origin !== ALLOWED_ORIGIN) {
-      return jsonError(origin, 403, 'このオリジンからのアクセスは許可されていません');
-    }
-
-    // ---- レート制限 (IPごとに1日あたりの上限) ----
-    if (env.RATE_LIMIT) {
-      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-      const today = new Date().toISOString().slice(0, 10);
-      const key = `rl:${ip}:${today}`;
-      const current = parseInt((await env.RATE_LIMIT.get(key)) || '0', 10);
-
-      if (current >= DAILY_LIMIT_PER_IP) {
-        return jsonError(origin, 429, '本日の利用上限に達しました。時間をおいて再度お試しください。');
-      }
-      await env.RATE_LIMIT.put(key, String(current + 1), { expirationTtl: 60 * 60 * 26 });
-    }
-
-    // ---- リクエスト内容の検証 ----
-    let body;
-    try {
-      body = await request.json();
-    } catch (e) {
-      return jsonError(origin, 400, 'リクエストの形式が正しくありません');
-    }
-
-    const { system, messages } = body || {};
-
-    if (typeof system !== 'string' || system.length < 10 || system.length > 4000) {
-      return jsonError(origin, 400, '不正なリクエストです');
-    }
-    if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_HISTORY_MESSAGES) {
-      return jsonError(origin, 400, '不正なリクエストです');
-    }
-    for (const m of messages) {
-      if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') {
-        return jsonError(origin, 400, '不正なリクエストです');
-      }
-    }
-    // このWorkerは「会話練習チャット」専用。想定外のsystemプロンプトを使った
-    // 汎用プロキシとして悪用されるのを防ぐための簡易チェック(完全な防御ではありません)。
-    if (!system.includes('【フィードバックのルール】') || !system.includes('【出力形式】')) {
-      return jsonError(origin, 400, 'このエンドポイントは会話練習チャット専用です');
-    }
-
-    // ---- Anthropic APIへ転送 ----
-    // モデルが説明文やコードフェンス付きでJSONを返してしまい、フロント側で
-    // 解析に失敗する（＝再送信ループになる）のを防ぐため、assistant側の
-    // 返信を "{" から始まるよう強制する（プリフィル）。
-    const anthropicMessages = messages.concat([{ role: 'assistant', content: '{' }]);
-
-    let anthropicRes;
-    try {
-      anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, system, messages: anthropicMessages })
-      });
-    } catch (e) {
-      return jsonError(origin, 502, 'Anthropic APIへの接続に失敗しました');
-    }
-
-    const data = await anthropicRes.json();
-
-    // プリフィルで送った "{" は応答に含まれてこないため、ここで先頭に戻しておく。
-    if (anthropicRes.ok && data && Array.isArray(data.content) && data.content[0] && data.content[0].type === 'text') {
-      data.content[0].text = '{' + data.content[0].text;
-    }
-
-    return new Response(JSON.stringify(data), {
-      status: anthropicRes.status,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' }
-    });
+  // 初期メッセージの設定（雰囲気やジャンルに応じた挨拶）
+  let initialMsg = `こんにちは！${state.name}だよ。よろしくね！`;
+  if (state.genre.includes("コンカフェ")) {
+    initialMsg = state.atmosphere.includes("地雷") ? `いらっしゃい〜お給仕中だよあいにきてくれてありがと…🖤` : `おかえりなさいませっ！今日も会えて嬉しいな✨`;
+  } else if (state.genre.includes("地下")) {
+    initialMsg = `今日もお話できて嬉しい！来てくれてありがと〜！！`;
+  } else if (state.personality.includes("ツンデレ")) {
+    initialMsg = `…何？用事あるなら聞くけど。`;
+  } else if (state.atmosphere.includes("ギャル")) {
+    initialMsg = `やっほー！今日めっちゃテンション上がるわ〜笑`;
   }
-};
+
+  addMessage(initialMsg, 'target');
+}
+
+function addMessage(text, type) {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = `msg ${type}`;
+  div.innerText = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function sendMessage() {
+  const input = document.getElementById('user-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  addMessage(text, 'user');
+  input.value = '';
+
+  setTimeout(() => {
+    generateResponseAndFeedback(text);
+  }, 600);
+}
+
+function generateResponseAndFeedback(userText) {
+  let reply = "";
+  let score = 75;
+  let advice = "";
+  let bestExample = "";
+
+  // 性格・口調のトーン設定
+  let toneSuffix = "";
+  if (state.atmosphere.includes("ギャル")) toneSuffix = "〜！笑";
+  else if (state.atmosphere.includes("地雷")) toneSuffix = "…🥺";
+  else if (state.personality.includes("ツンデレ")) toneSuffix = "だし…";
+
+  // 1. 返信の分岐（文脈判定）
+  if (userText.length < 5) {
+    score = 40;
+    if (state.personality.includes("ツンデレ")) {
+      reply = `は？なにそれ、それだけ？${toneSuffix}`;
+    } else {
+      reply = `うん…？それだけ〜？${toneSuffix}`;
+    }
+    advice = "返信が短すぎて話が広がりにくくなっています。質問を足すなどコミュニケーションのきっかけを作りましょう。";
+    bestExample = `「そういえば${state.name}ちゃんって、休みの日は何して過ごすことが多い？」`;
+  } 
+  else if (userText.includes("可愛い") || userText.includes("好き")) {
+    if (state.count.includes("初対面")) {
+      score = 45;
+      reply = state.personality.includes("ツンデレ") ? `…急に何言ってるの？気安く言わないで。` : `え、あ…ありがとうございます（ちょっと驚いている）`;
+      advice = `${state.genre}の初対面でいきなり外見や直球の好意を伝えると警戒されます。`;
+      bestExample = `「${state.name}ちゃんの話しやすい雰囲気、すごく素敵だと思う！」`;
+    } else {
+      score = 90;
+      reply = `えーっホントに！？嬉しいな…照れる笑`;
+      advice = "関係性ができている状態での自然なアプローチです。好感度アップ！";
+      bestExample = `「いつも〇〇ちゃんの頑張ってる姿見てて可愛いなと思ってたんだよね」`;
+    }
+  } 
+  else if (userText.includes("どこ") || userText.includes("行こう") || userText.includes("ご飯")) {
+    if (state.count.includes("初対面")) {
+      score = 60;
+      reply = `うーん、まだ会ったばかりだし、もう少し仲良くなってからかな…！`;
+      advice = "初対面からの急な誘いは警戒されます。まずは会話で共通の趣味を見つけましょう。";
+      bestExample = `「${state.name}ちゃんって甘いもの好き？おすすめのカフェがあるから今度教えてあげるね！」`;
+    } else {
+      score = 85;
+      reply = `いいね！行きたい！何食べに行く〜？✨`;
+      advice = "関係性が構築できているため、スムーズに次のステップに誘えています。";
+      bestExample = `「来週あたり、気になってた〇〇のお店一緒に行かない？」`;
+    }
+  } 
+  else {
+    score = 75;
+    if (state.personality.includes("ノリが良い")) {
+      reply = `まじ！？それめっちゃわかる〜！もっと詳しく教えて！${toneSuffix}`;
+    } else {
+      reply = `そうなんだね！${state.name}もそれ気になってたんだよね。`;
+    }
+    advice = "自然な相槌で会話は継続できています。もう一歩踏み込んだ話題を投げかけるとさらにGOODです。";
+    bestExample = `「そうなんだ！ちなみに${state.name}ちゃんは最近ハマってることとかある？」`;
+  }
+
+  // MBTIに関する追加アドバイス（選択されている場合）
+  if (state.mbti) {
+    advice += `\n💡【${state.mbti}攻略のワンポイント】: 相手のタイプに合わせたテンポ感や共感の仕方を意識するとさらに刺さります。`;
+  }
+
+  addMessage(reply, 'target');
+
+  // フィードバックの口調切り替え
+  let fbHeader = "";
+  if (state.fbStyle === 'strict') {
+    fbHeader = `🔥【スパルタコーチ評】 評価：${score}点`;
+    advice = "【喝！】" + advice;
+  } else if (state.fbStyle === 'friendly') {
+    fbHeader = `🌸【女子目線のアドバイス】 評価：${score}点`;
+    advice = "【ここポイントだよ〜】" + advice;
+  } else {
+    fbHeader = `📊【分析レポート】 評価：${score}点`;
+    advice = "【分析】" + advice;
+  }
+
+  // フィードバック表示
+  const fbBox = document.getElementById('feedback-box');
+  fbBox.style.display = 'block';
+  fbBox.innerHTML = `
+    <strong>${fbHeader}</strong><br>
+    ${advice}<br>
+    <div style="margin-top:8px;"><strong>おすすめの送信例：</strong></div>
+    <div class="example-text">${bestExample}</div>
+  `;
+}
+</script>
+
+</body>
+</html>
