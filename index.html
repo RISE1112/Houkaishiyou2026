@@ -670,7 +670,13 @@
       console.error('API error:', err);
       removeTyping();
       sendBtn.disabled = false;
-      addErrorNote(()=>attemptSend(text), err && err.message);
+      // fetch自体が失敗した場合（サーバーに繋がらない、CORSでブロックされた等）は
+      // Safariが返す "Load failed" のような生の英語エラーではなく、分かりやすい日本語で表示する。
+      const isNetworkError = (err instanceof TypeError);
+      const msg = isNetworkError
+        ? 'サーバーに接続できませんでした。WORKER_URLの設定、またはネット接続をご確認ください。'
+        : (err && err.message);
+      addErrorNote(()=>attemptSend(text), msg);
     });
   }
 
