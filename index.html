@@ -1,168 +1,132 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#1c1233">
-<title>会話練習チャット</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg-night-1:#1c1233;
-    --bg-night-2:#331b4d;
-    --card:#fff8f3;
-    --accent:#ff3d7f;
-    --accent-dark:#d81f60;
-    --accent-2:#ffd166;
-    --ink:#2b1b3d;
-    --ink-soft:#8577a0;
-    --paper-ai:#ffffff;
-    --line:#efe3f5;
-    --danger:#c0392b;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
-    background:linear-gradient(160deg,var(--bg-night-1),var(--bg-night-2));
-    color:var(--ink);
-    min-height:100dvh;
-    display:flex;
-    justify-content:center;
-  }
-  .display-font{font-family:"Zen Maru Gothic",-apple-system,sans-serif;}
+// ============================================================
+// 会話練習チャット用 Anthropic API プロキシ (Cloudflare Worker)
+// ============================================================
+// フロントエンド(index.html / rise1112.github.io)から system と
+// messages だけを受け取り、このWorkerがサーバー側に保管した
+// ANTHROPIC_API_KEY を付けて api.anthropic.com に転送します。
+// これにより、APIキーをブラウザ側のコード(=誰でも見られるGitHubの
+// リポジトリ)に書かずに済みます。
+//
+// デプロイ手順は README.md を参照してください。
+// ============================================================
 
-  #app{
-    width:100%;
-    max-width:480px;
-    height:100dvh;
-    height:100vh;
-    display:flex;
-    flex-direction:column;
-    background:var(--card);
-    position:relative;
-    overflow:hidden;
-    box-shadow:0 0 40px rgba(0,0,0,.35);
-  }
+// あなたのGitHub PagesのURL。ここ以外のサイトからのリクエストは拒否する。
+const ALLOWED_ORIGIN = 'https://rise1112.github.io';
 
-  /* ---------- Setup screen ---------- */
-  #setup-screen{
-    flex:1;
-    overflow-y:auto;
-    -webkit-overflow-scrolling:touch;
-    padding:28px 20px calc(28px + env(safe-area-inset-bottom));
-  }
-  .setup-hero{
-    padding:6px 4px 18px;
-  }
-  .setup-hero h1{
-    margin:0 0 6px;
-    font-size:26px;
-    font-weight:900;
-    color:var(--accent-dark);
-  }
-  .setup-hero p{
-    margin:0;
-    font-size:13.5px;
-    color:var(--ink-soft);
-    line-height:1.6;
-  }
-  .group{
-    margin:22px 0;
-  }
-  .group-label{
-    font-size:13px;
-    font-weight:700;
-    color:var(--ink);
-    margin-bottom:8px;
-    display:block;
-  }
-  .group-hint{
-    font-size:11.5px;
-    color:var(--ink-soft);
-    margin:-4px 0 8px;
-  }
-  .chip-row{
-    display:flex;
-    flex-wrap:wrap;
-    gap:8px;
-  }
-  .chip{
-    padding:9px 15px;
-    border-radius:999px;
-    border:1.6px solid var(--line);
-    background:#fff;
-    color:var(--ink);
-    font-size:13.5px;
-    cursor:pointer;
-    user-select:none;
-    transition:background .12s,border-color .12s,color .12s,transform .12s;
-    -webkit-tap-highlight-color:transparent;
-  }
-  .chip:active{transform:scale(0.96);}
-  .chip.selected{
-    background:var(--accent);
-    border-color:var(--accent);
-    color:#fff;
-    font-weight:700;
-  }
-  select, input[type="text"]{
-    width:100%;
-    font-size:16px; /* prevents iOS auto-zoom */
-    padding:11px 13px;
-    border-radius:12px;
-    border:1.6px solid var(--line);
-    background:#fff;
-    color:var(--ink);
-    font-family:inherit;
-  }
-  select:focus, input[type="text"]:focus{outline:2px solid var(--accent-2);}
-  .group.error .group-label{color:var(--danger);}
-  .group.error .chip{border-color:var(--danger);}
+const MODEL = 'claude-sonnet-5';
+const MAX_TOKENS = 700;
 
-  #start-btn{
-    width:100%;
-    margin-top:10px;
-    padding:15px;
-    border:none;
-    border-radius:16px;
-    background:linear-gradient(135deg,var(--accent),var(--accent-dark));
-    color:#fff;
-    font-size:16px;
-    font-weight:700;
-    font-family:"Zen Maru Gothic",sans-serif;
-    cursor:pointer;
-  }
-  #start-btn:active{transform:scale(0.98);}
-  .disclaimer{
-    margin-top:14px;
-    font-size:11px;
-    color:var(--ink-soft);
-    line-height:1.6;
-    text-align:center;
-  }
+// 1つのIPが1日に送れるメッセージ数の上限。青天井の「完全無制限」は
+// 誰かに乱用された場合に高額請求につながるため、必ず何らかの上限を設けることを推奨します。
+const DAILY_LIMIT_PER_IP = 60;
 
-  /* ---------- Chat screen ---------- */
-  #chat-screen{
-    display:none;
-    flex-direction:column;
-    height:100%;
+// 1リクエストで送られてくる会話履歴の最大メッセージ数(異常に長い会話を防ぐ)
+const MAX_HISTORY_MESSAGES = 80;
+
+function corsHeaders(origin) {
+  const allow = (origin === ALLOWED_ORIGIN) ? origin : ALLOWED_ORIGIN;
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin'
+  };
+}
+
+function jsonError(origin, status, message) {
+  return new Response(
+    JSON.stringify({ type: 'error', error: { type: 'invalid_request', message } }),
+    { status, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' } }
+  );
+}
+
+export default {
+  async fetch(request, env) {
+    const origin = request.headers.get('Origin') || '';
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders(origin) });
+    }
+
+    if (request.method !== 'POST') {
+      return jsonError(origin, 405, 'Method not allowed');
+    }
+
+    if (origin !== ALLOWED_ORIGIN) {
+      return jsonError(origin, 403, 'このオリジンからのアクセスは許可されていません');
+    }
+
+    // ---- レート制限 (IPごとに1日あたりの上限) ----
+    if (env.RATE_LIMIT) {
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const today = new Date().toISOString().slice(0, 10);
+      const key = `rl:${ip}:${today}`;
+      const current = parseInt((await env.RATE_LIMIT.get(key)) || '0', 10);
+
+      if (current >= DAILY_LIMIT_PER_IP) {
+        return jsonError(origin, 429, '本日の利用上限に達しました。時間をおいて再度お試しください。');
+      }
+      await env.RATE_LIMIT.put(key, String(current + 1), { expirationTtl: 60 * 60 * 26 });
+    }
+
+    // ---- リクエスト内容の検証 ----
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return jsonError(origin, 400, 'リクエストの形式が正しくありません');
+    }
+
+    const { system, messages } = body || {};
+
+    if (typeof system !== 'string' || system.length < 10 || system.length > 4000) {
+      return jsonError(origin, 400, '不正なリクエストです');
+    }
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_HISTORY_MESSAGES) {
+      return jsonError(origin, 400, '不正なリクエストです');
+    }
+    for (const m of messages) {
+      if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') {
+        return jsonError(origin, 400, '不正なリクエストです');
+      }
+    }
+    // このWorkerは「会話練習チャット」専用。想定外のsystemプロンプトを使った
+    // 汎用プロキシとして悪用されるのを防ぐための簡易チェック(完全な防御ではありません)。
+    if (!system.includes('【フィードバックのルール】') || !system.includes('【出力形式】')) {
+      return jsonError(origin, 400, 'このエンドポイントは会話練習チャット専用です');
+    }
+
+    // ---- Anthropic APIへ転送 ----
+    // モデルが説明文やコードフェンス付きでJSONを返してしまい、フロント側で
+    // 解析に失敗する（＝再送信ループになる）のを防ぐため、assistant側の
+    // 返信を "{" から始まるよう強制する（プリフィル）。
+    const anthropicMessages = messages.concat([{ role: 'assistant', content: '{' }]);
+
+    let anthropicRes;
+    try {
+      anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, system, messages: anthropicMessages })
+      });
+    } catch (e) {
+      return jsonError(origin, 502, 'Anthropic APIへの接続に失敗しました');
+    }
+
+    const data = await anthropicRes.json();
+
+    // プリフィルで送った "{" は応答に含まれてこないため、ここで先頭に戻しておく。
+    if (anthropicRes.ok && data && Array.isArray(data.content) && data.content[0] && data.content[0].type === 'text') {
+      data.content[0].text = '{' + data.content[0].text;
+    }
+
+    return new Response(JSON.stringify(data), {
+      status: anthropicRes.status,
+      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' }
+    });
   }
-  #chat-header{
-    flex-shrink:0;
-    padding:calc(14px + env(safe-area-inset-top)) 16px 12px;
-    background:linear-gradient(120deg,var(--bg-night-1),var(--bg-night-2));
-    color:#fff;
-    display:flex;
-    align-items:center;
-    gap:10px;
-  }
-  .avatar-badge{
-    width:42px;height:42px;border-radius:50%;
-    background:linear-gradient(135deg,var(--accent-2),var(--accent));
-    display:flex;align-items:center;justify-content:center;
-    font-size
+};
