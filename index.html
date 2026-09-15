@@ -24,7 +24,6 @@
   .user { background: #007aff; color: #fff; align-self: flex-end; border-bottom-right-radius: 2px; }
   
   .feedback { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 10px; line-height: 1.5; }
-  .score-badge { font-size: 1.1rem; font-weight: bold; color: #d97706; margin-bottom: 6px; }
   .example-text { background: #fff; padding: 8px; border-radius: 6px; border: 1px dashed #ffd591; margin-top: 6px; color: #d46b08; font-weight: bold; }
 </style>
 </head>
@@ -42,16 +41,13 @@
       <li>下のボタンからGoogle AI Studioを開きます。</li>
       <li>Googleアカウントでログインします。</li>
       <li><strong>「Create API key」</strong>をタップします。</li>
-      <li>表示されたコードをコピーして上に貼り付けます。</li>
+      <li>表示された英数字のコードをコピーして上に貼り付けます。</li>
     </ol>
     <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-link-btn">👉 Google AI Studioを開いてキーを取得</a>
   </div>
 
   <label>2. 相手の名前</label>
   <input type="text" id="target-name" placeholder="例: りょうか">
-
-  <label>3. X (旧Twitter) ユーザーネーム（任意）</label>
-  <input type="text" id="twitter-id" placeholder="例: @example_idol (※@無しでも可)">
 
   <label>ジャンル</label>
   <select id="genre">
@@ -138,18 +134,15 @@
 
 <script>
 let state = {};
-let conversationLog = []; // エラー回避のためテキスト形式で会話履歴を管理
+let chatHistory = [];
 
 async function startChat() {
   const apiKey = document.getElementById('api-key').value.trim();
   if(!apiKey) { alert('APIキーを入力してください'); return; }
 
-  let twitterId = document.getElementById('twitter-id').value.trim().replace('@', '');
-
   state = {
     apiKey: apiKey,
     name: document.getElementById('target-name').value.trim() || "女の子",
-    twitterId: twitterId,
     genre: document.getElementById('genre').value,
     age: document.getElementById('age').value,
     mbti: document.getElementById('mbti').value,
@@ -167,14 +160,23 @@ async function startChat() {
   btn.disabled = true;
   btn.innerText = "通信中...";
 
-  const initPrompt = "会話のスタートです。ユーザーのことが気になっていて興味を持っている、親しみやすい挨拶から始めてください。";
-  const data = await callGeminiAPI(initPrompt);
+  chatHistory = [
+    {
+      role: "user",
+      parts: [{ text: "会話を開始してください。最初の挨拶をお願いします。" }]
+    }
+  ];
+
+  const data = await callGeminiAPI();
 
   if (data && data.reply) {
     addMessage(data.reply, 'target');
-    conversationLog.push(`${state.name}: ${data.reply}`);
+    chatHistory.push({
+      role: "model",
+      parts: [{ text: JSON.stringify(data) }]
+    });
   } else {
-    addMessage(`やっほー！${state.name}だよ！今日は何お話する〜？✨`, 'target');
+    addMessage(`やっほー！${state.name}だよ！今日は何お話しする〜？✨`, 'target');
   }
 
   btn.disabled = false;
@@ -182,12 +184,8 @@ async function startChat() {
 }
 
 function buildSystemPrompt() {
-  let twitterContext = "";
-  if (state.twitterId) {
-    twitterContext = `- X(旧Twitter)アカウント: @${state.twitterId} の普段の投稿スタイル・口調・雰囲気を全体の約30%程度参考にして発言に反映させてください。`;
-  }
-
-  return `あなたは恋愛シミュレーションのキャラクター「${state.name}」および恋愛コーチです。
+  return `あなたは恋愛シミュレーションのキャラクター「${state.name}」です。
+ユーザー（男性）とのLINEやチャットのやり取りを行います。
 
 【キャラクター設定】
 - 名前: ${state.name}
@@ -195,22 +193,21 @@ function buildSystemPrompt() {
 - 年齢: ${state.age}
 - MBTI: ${state.mbti}
 - 性格: ${state.personality}
-- 雰囲気: ${state.atmosphere}
+- 雰囲気・口調: ${state.atmosphere}
 - 関係性: ${state.count}
-${twitterContext}
 
-【会話ルール】
-1. 直前のユーザー発言に対して、定型文を使わずに人間らしいリアクションをしてください。
-2. ユーザーに興味・好意を持っており、必ず「ユーザーに対する質問やプライベートを深掘りする問いかけ」を会話内に1つ含めてください。
-3. 過去の会話の流れを踏まえ、同じフレーズを繰り返さないでください。
+【最重要指示】
+- ユーザーの発言に自然に応答し、1〜2文程度のリアリティのあるLINE風テキストを作成してください。
+- ユーザーに強い興味を持っており、毎回会話の中で「ユーザーへの質問」を自然に1つ入れて会話を膨らませてください。
+- 返信のたびに、ユーザーの直前の送信文に対する「評価（100点満点）」「フィードバック（${state.fbStyle}の口調）」「おすすめの送信例」を作成してください。
 
 【出力形式】
-以下のキーを持つJSONオブジェクトだけを返してください（それ以外のテキストは不可）：
+必ず以下のJSON形式でのみ出力してください。他のテキストは含めないでください。
 {
-  "reply": "女の子としての返信（質問や興味を含む）",
+  "reply": "女の子としての返信メッセージ",
   "score": "85点",
-  "advice": "ユーザーの発言に対する${state.fbStyle}口調でのフィードバック解説",
-  "bestExample": "こう返せばさらに相手の好感度が上がった具体的な送信例"
+  "advice": "ユーザーの直前メッセージに対するアドバイス",
+  "bestExample": "こう送るともっと良かった送信例"
 }`;
 }
 
@@ -235,52 +232,45 @@ async function sendMessage() {
   addMessage(text, 'user');
   input.value = '';
 
-  conversationLog.push(`ユーザー: ${text}`);
+  chatHistory.push({
+    role: "user",
+    parts: [{ text: text }]
+  });
 
-  const data = await callGeminiAPI(`ユーザーの発言: 「${text}」`);
+  const data = await callGeminiAPI();
 
   if (data && data.reply) {
     addMessage(data.reply, 'target');
-    conversationLog.push(`${state.name}: ${data.reply}`);
+    
+    chatHistory.push({
+      role: "model",
+      parts: [{ text: JSON.stringify(data) }]
+    });
 
-    // フィードバック表示
     const fbBox = document.getElementById('feedback-box');
     fbBox.style.display = 'block';
     fbBox.innerHTML = `
-      <div class="score-badge">【判定結果】 評価点数：${data.score || "80点"}</div>
-      <strong>💡 フィードバック解説：</strong><br>
-      ${data.advice || "自然なやり取りができています！"}<br>
-      <div style="margin-top:8px;"><strong>✨ おすすめの送信例：</strong></div>
-      <div class="example-text">${data.bestExample || "「そうなんだ！もっと詳しく教えてほしいな！」"}</div>
+      <strong>【フィードバック】 評価：${data.score || "80点"}</strong><br>
+      ${data.advice || "自然で良いメッセージです！"}<br>
+      <div style="margin-top:6px;"><strong>おすすめの送信例：</strong></div>
+      <div class="example-text">${data.bestExample || "「そうなんだ！詳しく教えて！」"}</div>
     `;
   } else {
-    addMessage("ごめん、通知見逃してたた！もう一回送って！", 'target');
+    addMessage("ごめんね、電波が悪くてうまく届かなかったみたい！もう一回送ってもらえる？", 'target');
   }
 
   btn.disabled = false;
   btn.innerText = "送信する";
 }
 
-async function callGeminiAPI(userInputText) {
-  // 安定性の高い最新エンドポイントに変更
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`;
+async function callGeminiAPI() {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`;
   
-  const historyText = conversationLog.slice(-6).join("\n"); // 直近6件分をコンテキスト保持
-  
-  const fullPrompt = `${buildSystemPrompt()}
-
-これまでの会話履歴:
-${historyText}
-
-最新の入力:
-${userInputText}`;
-
   const payload = {
-    contents: [
-      {
-        parts: [{ text: fullPrompt }]
-      }
-    ],
+    systemInstruction: {
+      parts: [{ text: buildSystemPrompt() }]
+    },
+    contents: chatHistory,
     generationConfig: {
       responseMimeType: "application/json"
     }
@@ -294,7 +284,7 @@ ${userInputText}`;
     });
 
     if (!res.ok) {
-      console.error("APIレスポンスエラー:", res.status);
+      console.error("APIエラーレスポンス:", await res.text());
       return null;
     }
 
@@ -302,7 +292,7 @@ ${userInputText}`;
     const rawText = result.candidates[0].content.parts[0].text;
     return JSON.parse(rawText);
   } catch(e) {
-    console.error("API Call Error:", e);
+    console.error("通信またはパースエラー:", e);
     return null;
   }
 }
